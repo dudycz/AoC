@@ -1,105 +1,90 @@
 use std::collections::HashMap;
+use itertools::Itertools;
+use regex::Regex;
 
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 
-fn has_all_fields(s: &HashMap<String,String>, v: &Vec<&str>) -> bool
+fn has_all_fields(pass: &HashMap<&str,&str>) -> bool
 {
-    let mut valid= true;
-    for val in v.iter()
-    {
-        if !s.contains_key(*val)
-        {
-            valid = false;
-            break;
-        }
-    }
-    valid
+    ["byr","iyr","eyr","hgt","hcl","ecl","pid"].iter()
+        .all(|p| pass.contains_key(p))
 }
 
-fn has_valid_eyr(s: &HashMap<String,String>) -> bool
+fn is_in_range(s: &str, min:u32, max:u32) -> bool
 {
-    let s = s.get("eyr").unwrap().parse::<u32>().unwrap();
-    s >= 2020 && s <= 2030
+    let val = s.parse::<u32>().unwrap();
+    val >= min && val <= max
 }
 
-fn has_valid_iyr(s: &HashMap<String,String>) -> bool
+fn has_valid_hgt(s : &str) -> bool
 {
-    let s = s.get("iyr").unwrap().parse::<u32>().unwrap();
-    s >= 2010 && s <= 2020
-}
+    let (hgt,unit) = s.split_at(s.len()-2);
 
-fn has_valid_byr(s : &HashMap<String,String>) -> bool
-{
-    let s = s.get("byr").unwrap().parse::<u32>().unwrap();
-    s >= 1920 && s <= 2002
-}
-
-fn has_valid_hgt(s : &HashMap<String,String>) -> bool
-{
-    let mut s = s.get("hgt").unwrap().clone();
-    let unit = s.split_off(s.len()-2);
-    let hgt = s.parse::<u32>().unwrap();
-    match unit.as_str() {
-        "in" => hgt >= 59 && hgt <= 76,
-        "cm" => hgt>=150 && hgt <= 193,
+    match unit {
+        "in" => is_in_range(hgt, 59,76),
+        "cm" => is_in_range(hgt,150,193),
         _ => false
     }
 }
 
-fn has_valid_pid(s : &HashMap<String,String>) -> bool
+fn has_valid_pid(s : &str) -> bool
 {
-    use regex::Regex;
-    let s = s.get("pid").unwrap();
     let re = Regex::new(r"^\d{9}$").unwrap();
     re.is_match(s)
 }
 
-fn has_valid_hcl(s : &HashMap<String,String>) -> bool
+fn has_valid_hcl(s : &str) -> bool
 {
-    use regex::Regex;
-    let s = s.get("hcl").unwrap();
     let re = Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
     re.is_match(s)
 }
-fn has_valid_ecl(s : &HashMap<String,String>) -> bool
+
+fn has_valid_ecl(s : &str) -> bool
 {
-    let col = vec!["amb", "blu", "brn", "gry", "grn", "hzl", "oth"];
-    let s = s.get("ecl").unwrap();
-    col.iter().any(|&i| i==s)
+    ["amb","blu","brn","gry","grn","hzl","oth"].contains(&s)
+}
+
+fn is_valid(pass: &HashMap<&str,&str>) -> bool
+{
+    pass.iter().all(|(&k, v)| match k {
+        "byr" => is_in_range(v, 1920,2002),
+        "iyr" => is_in_range(v, 2010,2020),
+        "eyr" => is_in_range(v, 2020,2030),
+        "hcl" => has_valid_hcl(v),
+        "ecl" => has_valid_ecl(v),
+        "pid" => has_valid_pid(v),
+        "cid" => true,
+        "hgt" => has_valid_hgt(v),
+        _ => unreachable!()
+    })
 }
 
 fn main() {
-    let keywords = vec!["byr","iyr","eyr","hgt","hcl","ecl","pid"];
     if let Ok(lines) = read_lines("src/input") {
 
         let mut pre_checked = 0;
-        let mut valid = 0;
-        for line in lines {
-            if let Ok(ip) = line {
-                let split:HashMap<String,String> = ip.split(" ")
-                    .map(|kv| kv.split(':').collect::<Vec<&str>>())
-                    .map(|vec| {
-                        assert_eq!(vec.len(), 2, "Failed with {:?}",vec);
-                        (vec[0].to_string(), vec[1].to_string())
-                    })
-                    .collect();
+        let mut validated = 0;
 
-                if has_all_fields(&split,&keywords)
+        for line in lines {
+            let line = line.unwrap();
+            let passport = line
+                .split_whitespace()
+                .flat_map(|p| p.split(':'))
+                .tuples()
+                .collect::<HashMap<_,_>>();
+
+            if has_all_fields(&passport)
+            {
+                pre_checked += 1;
+                if is_valid(&passport)
                 {
-                    if has_valid_byr(&split) && has_valid_eyr(&split) &&
-                        has_valid_iyr(&split) && has_valid_pid(&split) &&
-                        has_valid_hgt(&split) && has_valid_ecl(&split) &&
-                        has_valid_hcl(&split)
-                    {
-                        valid += 1;
-                    }
-                    pre_checked += 1;
+                    validated += 1;
                 }
             }
         }
-        println!("Number of passports: pre-checked={}, validated={}",pre_checked, valid);
+        println!("Number of passports: pre-checked={}, validated={}",pre_checked, validated);
     }
 }
 
