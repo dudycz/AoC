@@ -16,7 +16,7 @@ fn main() {
         .lines()
         .map(|x| decode(x))
         .collect();
-    
+
     let max = *boarding_cards.iter().max().unwrap();
     let min = *boarding_cards.iter().min().unwrap();
     let missing_board_id = (min..max).find(|&x| !boarding_cards.contains(&x)).unwrap();
